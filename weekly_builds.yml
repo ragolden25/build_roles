@@ -1,0 +1,44 @@
+---
+# weekly_builds.yml -- weekly early-warning builds of every component.
+#   play_weekly_builds.sh                       all components
+#   play_weekly_builds.sh prometheus postgres   only those
+# Each weekly_build_<component> role catches its own failures and reports them, so one broken
+# component never stops the others. The play fails at the very end if anything needs attention.
+- hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars_files:
+    - /opt/ansible/vars/master_vars.yml
+    - /opt/ansible/vars/vault.yml
+
+  vars:
+    weekly_only: []
+
+  roles:
+    - role: /opt/ansible/nucleus/roles/weekly_build_grafana
+      when: weekly_only | length == 0 or 'grafana' in weekly_only
+    - role: /opt/ansible/nucleus/roles/weekly_build_prometheus
+      when: weekly_only | length == 0 or 'prometheus' in weekly_only
+    - role: /opt/ansible/nucleus/roles/weekly_build_idrac
+      when: weekly_only | length == 0 or 'idrac' in weekly_only
+    - role: /opt/ansible/nucleus/roles/weekly_build_nginx_grafana
+      when: weekly_only | length == 0 or 'nginx_grafana' in weekly_only
+    - role: /opt/ansible/nucleus/roles/weekly_build_guacamole
+      when: weekly_only | length == 0 or 'guacamole' in weekly_only
+    - role: /opt/ansible/nucleus/roles/weekly_build_guacd
+      when: weekly_only | length == 0 or 'guacd' in weekly_only
+    - role: /opt/ansible/nucleus/roles/weekly_build_postgres
+      when: weekly_only | length == 0 or 'postgres' in weekly_only
+    - role: /opt/ansible/nucleus/roles/weekly_build_nginx_guac
+      when: weekly_only | length == 0 or 'nginx_guac' in weekly_only
+
+  post_tasks:
+    - name: Weekly - summary
+      ansible.builtin.debug:
+        var: weekly_results
+
+    - name: Weekly - fail if anything needs attention
+      ansible.builtin.fail:
+        msg: "{{ weekly_results | dict2items | rejectattr('value', 'match', '^ok') | map(attribute='key') | list }} need attention"
+      when: weekly_results | default({}) | dict2items | rejectattr('value', 'match', '^ok') | list | length > 0
